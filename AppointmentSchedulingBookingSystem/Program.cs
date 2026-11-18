@@ -36,6 +36,10 @@ if (app.Configuration.GetValue<bool>("IdentitySeed:Enabled"))
 {
     using var scope = app.Services.CreateScope();
     await IdentitySeeder.SeedAsync(scope.ServiceProvider, app.Configuration);
+    if (app.Environment.IsDevelopment())
+    {
+        await AppointmentSeeder.SeedAsync(scope.ServiceProvider);
+    }
 }
 
 // HTTP request pipeline

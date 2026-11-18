@@ -22,6 +22,171 @@ namespace AppointmentSchedulingBookingSystem.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("AppointmentSchedulingBookingSystem.Models.Appointment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConsultantId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
+
+                    b.Property<int>("CustomerId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId", "Date");
+
+                    b.HasIndex("ConsultantId", "Date", "StartTime")
+                        .IsUnique()
+                        .HasFilter("[Status] <> 1");
+
+                    b.ToTable("Appointments", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Appointment_Status", "[Status] BETWEEN 0 AND 3");
+
+                            t.HasCheckConstraint("CK_Appointment_Time", "[StartTime] < [EndTime]");
+
+                            t.HasCheckConstraint("CK_Appointment_Timestamps", "[UpdatedAtUtc] >= [CreatedAtUtc]");
+                        });
+                });
+
+            modelBuilder.Entity("AppointmentSchedulingBookingSystem.Models.Consultant", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("SlotDurationMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Specialization")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("Consultants", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Consultants_SlotDuration", "[SlotDurationMinutes] BETWEEN 1 AND 1440");
+                        });
+                });
+
+            modelBuilder.Entity("AppointmentSchedulingBookingSystem.Models.ConsultantAvailability", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConsultantId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("int");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConsultantId", "DayOfWeek")
+                        .IsUnique();
+
+                    b.ToTable("ConsultantAvailabilities", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Availability_Day", "[DayOfWeek] BETWEEN 0 AND 6");
+
+                            t.HasCheckConstraint("CK_Availability_Time", "[StartTime] < [EndTime]");
+                        });
+                });
+
+            modelBuilder.Entity("AppointmentSchedulingBookingSystem.Models.ConsultantBreak", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConsultantId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly?>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<int?>("DayOfWeek")
+                        .HasColumnType("int");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConsultantId", "Date");
+
+                    b.HasIndex("ConsultantId", "DayOfWeek");
+
+                    b.ToTable("ConsultantBreaks", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Break_Day", "[DayOfWeek] IS NULL OR [DayOfWeek] BETWEEN 0 AND 6");
+
+                            t.HasCheckConstraint("CK_Break_Schedule", "([DayOfWeek] IS NOT NULL AND [Date] IS NULL) OR ([DayOfWeek] IS NULL AND [Date] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_Break_Time", "[StartTime] < [EndTime]");
+                        });
+                });
+
             modelBuilder.Entity("AppointmentSchedulingBookingSystem.Models.Customer", b =>
                 {
                     b.Property<int>("Id")
@@ -258,6 +423,58 @@ namespace AppointmentSchedulingBookingSystem.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("AppointmentSchedulingBookingSystem.Models.Appointment", b =>
+                {
+                    b.HasOne("AppointmentSchedulingBookingSystem.Models.Consultant", "Consultant")
+                        .WithMany("Appointments")
+                        .HasForeignKey("ConsultantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AppointmentSchedulingBookingSystem.Models.Customer", "Customer")
+                        .WithMany("Appointments")
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Consultant");
+
+                    b.Navigation("Customer");
+                });
+
+            modelBuilder.Entity("AppointmentSchedulingBookingSystem.Models.Consultant", b =>
+                {
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser", "User")
+                        .WithOne()
+                        .HasForeignKey("AppointmentSchedulingBookingSystem.Models.Consultant", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AppointmentSchedulingBookingSystem.Models.ConsultantAvailability", b =>
+                {
+                    b.HasOne("AppointmentSchedulingBookingSystem.Models.Consultant", "Consultant")
+                        .WithMany("Availabilities")
+                        .HasForeignKey("ConsultantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Consultant");
+                });
+
+            modelBuilder.Entity("AppointmentSchedulingBookingSystem.Models.ConsultantBreak", b =>
+                {
+                    b.HasOne("AppointmentSchedulingBookingSystem.Models.Consultant", "Consultant")
+                        .WithMany("Breaks")
+                        .HasForeignKey("ConsultantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Consultant");
+                });
+
             modelBuilder.Entity("AppointmentSchedulingBookingSystem.Models.Customer", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser", "User")
@@ -318,6 +535,20 @@ namespace AppointmentSchedulingBookingSystem.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("AppointmentSchedulingBookingSystem.Models.Consultant", b =>
+                {
+                    b.Navigation("Appointments");
+
+                    b.Navigation("Availabilities");
+
+                    b.Navigation("Breaks");
+                });
+
+            modelBuilder.Entity("AppointmentSchedulingBookingSystem.Models.Customer", b =>
+                {
+                    b.Navigation("Appointments");
                 });
 #pragma warning restore 612, 618
         }
