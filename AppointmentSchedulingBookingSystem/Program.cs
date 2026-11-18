@@ -31,6 +31,13 @@ builder.Services.AddRazorPages();
 
 var app = builder.Build();
 
+// Opt-in seed data; enabled in appsettings.Development.json for local development.
+if (app.Configuration.GetValue<bool>("IdentitySeed:Enabled"))
+{
+    using var scope = app.Services.CreateScope();
+    await IdentitySeeder.SeedAsync(scope.ServiceProvider, app.Configuration);
+}
+
 // HTTP request pipeline
 if (!app.Environment.IsDevelopment())
 {
