@@ -4,7 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>AppointmentScheduling_BookingSystem</RootNamespace>
+    <RootNamespace>AppointmentSchedulingBookingSystem</RootNamespace>
+    <AssemblyName>AppointmentSchedulingBookingSystem</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>

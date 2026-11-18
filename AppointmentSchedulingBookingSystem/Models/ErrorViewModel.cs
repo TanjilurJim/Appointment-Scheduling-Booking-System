@@ -1,4 +1,4 @@
-namespace AppointmentScheduling_BookingSystem.Models
+namespace AppointmentSchedulingBookingSystem.Models
 {
     public class ErrorViewModel
     {
