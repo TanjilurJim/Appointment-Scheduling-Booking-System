@@ -1,14 +1,31 @@
 using AppointmentSchedulingBookingSystem.Models;
 using Microsoft.AspNetCore.Mvc;
 using System.Diagnostics;
+using Microsoft.AspNetCore.Authorization;
 
 namespace AppointmentSchedulingBookingSystem.Controllers
 {
     public class HomeController : Controller
     {
+        [Authorize]
         public IActionResult Index()
         {
-            return View();
+            if (User.IsInRole("Admin"))
+            {
+                return RedirectToAction("Index", "Admin");
+            }
+
+            if (User.IsInRole("Consultant"))
+            {
+                return RedirectToAction("Index", "Consultant");
+            }
+
+            if (User.IsInRole("Customer"))
+            {
+                return RedirectToAction("Index", "Customer");
+            }
+
+            return Forbid();
         }
 
         public IActionResult Privacy()
