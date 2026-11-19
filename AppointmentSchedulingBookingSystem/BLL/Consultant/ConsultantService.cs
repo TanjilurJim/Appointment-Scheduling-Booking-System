@@ -1,47 +1,29 @@
-﻿using AppointmentSchedulingBookingSystem.Areas.Identity.Data;
 using AppointmentSchedulingBookingSystem.Models;
 using AppointmentSchedulingBookingSystem.ViewModels;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using AppointmentSchedulingBookingSystem.DAL.Consultants;
+using AppointmentSchedulingBookingSystem.BLL.Common;
+namespace AppointmentSchedulingBookingSystem.BLL.Consultants;
 
-namespace AppointmentSchedulingBookingSystem.Controllers;
-
-[Authorize(Roles = "Consultant")]
-public class ConsultantController : Controller
+public class ConsultantService(IConsultantRepository repository) : IConsultantService
 {
-    private readonly AppointmentSchedulingBookingSystemIdentityDbContext _context;
-    private readonly UserManager<IdentityUser> _userManager;
+    private readonly IConsultantRepository _repository = repository;
 
-    public ConsultantController(
-        AppointmentSchedulingBookingSystemIdentityDbContext context,
-        UserManager<IdentityUser> userManager)
-    {
-        _context = context;
-        _userManager = userManager;
-    }
-
-    public async Task<IActionResult> Index()
+    public async Task<ConsultantWeekViewModel> GetWeekAsync(string userId)
     {
         // Dashboard calendar uses Bangladesh time, independent of server timezone.
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
             DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Dhaka")));
         var weekStart = today.AddDays(-(((int)today.DayOfWeek + 6) % 7));
         var model = new ConsultantWeekViewModel { Today = today, WeekStart = weekStart };
-        var consultant = await GetCurrentConsultantAsync();
+        var consultant = await _repository.FindConsultantAsync(userId);
         if (consultant == null)
-            return View(model);
+            return model;
 
         model.HasProfile = true;
         model.SlotDurationMinutes = consultant.SlotDurationMinutes;
-        var workingDays = await _context.ConsultantAvailabilities.AsNoTracking()
-            .Where(a => a.ConsultantId == consultant.Id).ToListAsync();
+        var workingDays = await _repository.ReadAvailabilityAsync(consultant.Id);
         var weekEnd = weekStart.AddDays(6);
-        var breaks = await _context.ConsultantBreaks.AsNoTracking()
-            .Where(b => b.ConsultantId == consultant.Id &&
-                (b.DayOfWeek != null || (b.Date >= weekStart && b.Date <= weekEnd)))
-            .OrderBy(b => b.StartTime).ToListAsync();
+        var breaks = await _repository.GetWeekBreaksAsync(consultant.Id, weekStart, weekEnd);
 
         for (var i = 0; i < 7; i++)
         {
@@ -60,21 +42,17 @@ public class ConsultantController : Controller
                     }).ToList()
             });
         }
-        return View(model);
+        return model;
     }
 
-    [HttpGet]
-    public async Task<IActionResult> Schedule()
+    public async Task<ConsultantScheduleViewModel?> GetScheduleAsync(string userId)
     {
-        var consultant = await GetCurrentConsultantAsync();
+        var consultant = await _repository.FindConsultantAsync(userId);
 
         if (consultant == null)
-            return NotFound("Consultant profile not found.");
+            return null;
 
-        var availabilities = await _context.ConsultantAvailabilities
-            .Where(a => a.ConsultantId == consultant.Id)
-            .AsNoTracking()
-            .ToListAsync();
+        var availabilities = await _repository.ReadAvailabilityAsync(consultant.Id);
 
         var model = new ConsultantScheduleViewModel
         {
@@ -96,25 +74,26 @@ public class ConsultantController : Controller
                 .ToList()
         };
 
-        return View(model);
+        return model;
     }
 
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Schedule(ConsultantScheduleViewModel model)
+    public async Task<OperationResult> SaveScheduleAsync(string userId, ConsultantScheduleViewModel model)
     {
-        var consultant = await GetCurrentConsultantAsync();
+        var errors = new List<string>();
+        var consultant = await _repository.FindConsultantAsync(userId);
 
         if (consultant == null)
-            return NotFound();
+            return OperationResult.Missing();
+
+        if (model.SlotDurationMinutes is < 1 or > 1440)
+            errors.Add("Appointment duration must be between 1 and 1440 minutes.");
 
         if (model.WorkingDays == null ||
             model.WorkingDays.Count != 7 ||
             model.WorkingDays.Select(d => d.DayOfWeek).Distinct().Count() != 7 ||
             model.WorkingDays.Any(d => !Enum.IsDefined(d.DayOfWeek)))
         {
-            ModelState.AddModelError(
-                "", "The schedule must contain each weekday exactly once.");
+            errors.Add("The schedule must contain each weekday exactly once.");
         }
 
         if (model.WorkingDays != null)
@@ -123,30 +102,24 @@ public class ConsultantController : Controller
             {
                 if (day.StartTime >= day.EndTime)
                 {
-                    ModelState.AddModelError(
-                        "",
-                        $"{day.DayOfWeek}: End time must be after start time.");
+                    errors.Add($"{day.DayOfWeek}: End time must be after start time.");
                 }
 
                 if (day.EndTime > day.StartTime &&
                     (day.EndTime - day.StartTime).TotalMinutes <
                     model.SlotDurationMinutes)
                 {
-                    ModelState.AddModelError(
-                        "",
-                        $"{day.DayOfWeek}: Working hours must fit at least one appointment.");
+                    errors.Add($"{day.DayOfWeek}: Working hours must fit at least one appointment.");
                 }
             }
         }
 
-        if (!ModelState.IsValid)
-            return View(model);
+        if (errors.Count > 0)
+            return OperationResult.Fail(errors.ToArray());
 
-        var existing = await _context.ConsultantAvailabilities
-            .Where(a => a.ConsultantId == consultant.Id)
-            .ToListAsync();
+        var existing = await _repository.GetAvailabilityAsync(consultant.Id);
 
-        var workingDays = model.WorkingDays
+        var workingDays = model.WorkingDays!
             .Where(d => d.IsWorking)
             .ToList();
 
@@ -158,15 +131,10 @@ public class ConsultantController : Controller
         // Remove recurring breaks when their working day is removed.
         var removedDayNames = removedDays.Select(a => a.DayOfWeek).ToList();
 
-        var obsoleteBreaks = await _context.ConsultantBreaks
-            .Where(b =>
-                b.ConsultantId == consultant.Id &&
-                b.DayOfWeek.HasValue &&
-                removedDayNames.Contains(b.DayOfWeek.Value))
-            .ToListAsync();
+        var obsoleteBreaks = await _repository.GetRecurringBreaksAsync(consultant.Id, removedDayNames);
 
-        _context.ConsultantBreaks.RemoveRange(obsoleteBreaks);
-        _context.ConsultantAvailabilities.RemoveRange(removedDays);
+        _repository.RemoveBreaks(obsoleteBreaks);
+        _repository.RemoveAvailability(removedDays);
 
         foreach (var day in workingDays)
         {
@@ -175,7 +143,7 @@ public class ConsultantController : Controller
 
             if (availability == null)
             {
-                _context.ConsultantAvailabilities.Add(
+                _repository.AddAvailability(
                     new ConsultantAvailability
                     {
                         ConsultantId = consultant.Id,
@@ -193,55 +161,33 @@ public class ConsultantController : Controller
 
         consultant.SlotDurationMinutes = model.SlotDurationMinutes;
 
-        await _context.SaveChangesAsync();
+        await _repository.SaveAsync();
 
-        TempData["Success"] = "Your working schedule has been updated.";
-
-        return RedirectToAction(nameof(Schedule));
+        return OperationResult.Success("Your working schedule has been updated.");
     }
 
-    private async Task<Consultant?> GetCurrentConsultantAsync()
+    public async Task<ConsultantBreakListViewModel?> GetBreaksAsync(string userId)
     {
-        var userId = _userManager.GetUserId(User);
-
-        return await _context.Consultants
-            .FirstOrDefaultAsync(c => c.UserId == userId);
-    }
-    [HttpGet]
-    public async Task<IActionResult> Breaks()
-    {
-        var consultant = await GetCurrentConsultantAsync();
+        var consultant = await _repository.FindConsultantAsync(userId);
 
         if (consultant == null)
-            return NotFound("Consultant profile not found.");
+            return null;
 
         var model = await BuildBreaksViewModelAsync(consultant.Id);
 
-        return View(model);
+        return model;
     }
 
     private async Task<ConsultantBreakListViewModel>
         BuildBreaksViewModelAsync(int consultantId)
     {
-        var breaks = await _context.ConsultantBreaks
-            .AsNoTracking()
-            .Where(b => b.ConsultantId == consultantId)
-            .OrderBy(b => b.DayOfWeek)
-            .ThenBy(b => b.Date)
-            .ThenBy(b => b.StartTime)
-            .ToListAsync();
+        var breaks = await _repository.GetBreaksAsync(consultantId);
 
-        var workingDays = await _context.ConsultantAvailabilities
-            .AsNoTracking()
-            .Where(a => a.ConsultantId == consultantId)
-            .OrderBy(a => a.DayOfWeek)
-            .Select(a => new WorkingDayOptionViewModel
-            {
-                DayOfWeek = a.DayOfWeek,
-                StartTime = a.StartTime,
-                EndTime = a.EndTime
-            })
-            .ToListAsync();
+        var availability = await _repository.ReadAvailabilityAsync(consultantId);
+        var workingDays = availability.OrderBy(a => a.DayOfWeek).Select(a => new WorkingDayOptionViewModel
+        {
+            DayOfWeek = a.DayOfWeek, StartTime = a.StartTime, EndTime = a.EndTime
+        }).ToList();
 
         return new ConsultantBreakListViewModel
         {
@@ -256,31 +202,27 @@ public class ConsultantController : Controller
             }).ToList()
         };
     }
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> AddBreak(
-    [Bind(Prefix = "NewBreak")] ConsultantBreakViewModel model)
+    public async Task<OperationResult> AddBreakAsync(string userId, ConsultantBreakViewModel model)
     {
-        var consultant = await GetCurrentConsultantAsync();
+        var errors = new List<string>();
+        var consultant = await _repository.FindConsultantAsync(userId);
 
         if (consultant == null)
-            return NotFound();
+            return OperationResult.Missing();
 
         // No selection means no new break; existing breaks stay unchanged.
         if (string.IsNullOrWhiteSpace(model.BreakType))
-            return RedirectToAction(nameof(Breaks));
+            return OperationResult.Success();
 
         if (model.BreakType != "Recurring" &&
             model.BreakType != "Specific")
         {
-            ModelState.AddModelError(
-                "", "Invalid break type.");
+            errors.Add("Invalid break type.");
         }
 
         if (model.StartTime >= model.EndTime)
         {
-            ModelState.AddModelError(
-                "", "End time must be after start time.");
+            errors.Add("End time must be after start time.");
         }
 
         DayOfWeek targetDay = default;
@@ -290,8 +232,7 @@ public class ConsultantController : Controller
             if (!model.DayOfWeek.HasValue ||
                 !Enum.IsDefined(model.DayOfWeek.Value))
             {
-                ModelState.AddModelError(
-                    "", "Please select a valid weekday.");
+                errors.Add("Please select a valid weekday.");
             }
             else
             {
@@ -302,8 +243,7 @@ public class ConsultantController : Controller
         {
             if (!model.Date.HasValue)
             {
-                ModelState.AddModelError(
-                    "", "Please select a date.");
+                errors.Add("Please select a date.");
             }
             else
             {
@@ -311,45 +251,25 @@ public class ConsultantController : Controller
             }
         }
 
-        if (!ModelState.IsValid)
-        {
-            TempData["Error"] = string.Join(" ",
-                ModelState.Values
-                    .SelectMany(v => v.Errors)
-                    .Select(e => e.ErrorMessage));
-
-            return RedirectToAction(nameof(Breaks));
-        }
+        if (errors.Count > 0)
+            return OperationResult.Fail(errors.ToArray());
 
         // A break must be within the consultant's working hours.
-        var availability = await _context.ConsultantAvailabilities
-            .AsNoTracking()
-            .FirstOrDefaultAsync(a =>
-                a.ConsultantId == consultant.Id &&
-                a.DayOfWeek == targetDay);
+        var availability = await _repository.FindAvailabilityAsync(consultant.Id, targetDay);
 
         if (availability == null)
         {
-            TempData["Error"] =
-                "You are not scheduled to work on this day.";
-
-            return RedirectToAction(nameof(Breaks));
+            return OperationResult.Fail("You are not scheduled to work on this day.");
         }
 
         if (model.StartTime < availability.StartTime ||
             model.EndTime > availability.EndTime)
         {
-            TempData["Error"] =
-                "Break must be within your working hours.";
-
-            return RedirectToAction(nameof(Breaks));
+            return OperationResult.Fail("Break must be within your working hours.");
         }
 
         // Fetch existing breaks for this consultant.
-        var existingBreaks = await _context.ConsultantBreaks
-            .AsNoTracking()
-            .Where(b => b.ConsultantId == consultant.Id)
-            .ToListAsync();
+        var existingBreaks = await _repository.GetBreaksAsync(consultant.Id);
 
         var hasOverlap = existingBreaks.Any(b =>
         {
@@ -380,10 +300,7 @@ public class ConsultantController : Controller
 
         if (hasOverlap)
         {
-            TempData["Error"] =
-                "This break overlaps an existing break.";
-
-            return RedirectToAction(nameof(Breaks));
+            return OperationResult.Fail("This break overlaps an existing break.");
         }
 
         var newBreak = new ConsultantBreak
@@ -399,37 +316,28 @@ public class ConsultantController : Controller
             EndTime = model.EndTime
         };
 
-        _context.ConsultantBreaks.Add(newBreak);
+        _repository.AddBreak(newBreak);
 
-        await _context.SaveChangesAsync();
+        await _repository.SaveAsync();
 
-        TempData["Success"] = "Break added successfully.";
-
-        return RedirectToAction(nameof(Breaks));
+        return OperationResult.Success("Break added successfully.");
     }
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteBreak(int id)
+    public async Task<OperationResult> DeleteBreakAsync(string userId, int id)
     {
-        var consultant = await GetCurrentConsultantAsync();
+        var consultant = await _repository.FindConsultantAsync(userId);
 
         if (consultant == null)
-            return NotFound();
+            return OperationResult.Missing();
 
-        var existingBreak = await _context.ConsultantBreaks
-            .FirstOrDefaultAsync(b =>
-                b.Id == id &&
-                b.ConsultantId == consultant.Id);
+        var existingBreak = await _repository.FindBreakAsync(consultant.Id, id);
 
         if (existingBreak == null)
-            return NotFound();
+            return OperationResult.Missing();
 
-        _context.ConsultantBreaks.Remove(existingBreak);
+        _repository.RemoveBreak(existingBreak);
 
-        await _context.SaveChangesAsync();
+        await _repository.SaveAsync();
 
-        TempData["Success"] = "Break deleted successfully.";
-
-        return RedirectToAction(nameof(Breaks));
+        return OperationResult.Success("Break deleted successfully.");
     }
 }

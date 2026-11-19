@@ -1,31 +1,20 @@
+using System.Security.Claims;
+using AppointmentSchedulingBookingSystem.BLL.Home;
 using AppointmentSchedulingBookingSystem.Models;
 using Microsoft.AspNetCore.Mvc;
 using System.Diagnostics;
 using Microsoft.AspNetCore.Authorization;
 
-namespace AppointmentSchedulingBookingSystem.Controllers
+namespace AppointmentSchedulingBookingSystem.Controllers.Home
 {
-    public class HomeController : Controller
+    public class HomeController(IHomeService service) : Controller
     {
         [Authorize]
         public IActionResult Index()
         {
-            if (User.IsInRole("Admin"))
-            {
-                return RedirectToAction("Index", "Admin");
-            }
-
-            if (User.IsInRole("Consultant"))
-            {
-                return RedirectToAction("Index", "Consultant");
-            }
-
-            if (User.IsInRole("Customer"))
-            {
-                return RedirectToAction("Index", "Customer");
-            }
-
-            return Forbid();
+            var target = service.GetDashboard(User.Identities.SelectMany(identity =>
+                identity.FindAll(identity.RoleClaimType)).Select(claim => claim.Value));
+            return target == null ? Forbid() : RedirectToAction("Index", target);
         }
 
         public IActionResult Privacy()

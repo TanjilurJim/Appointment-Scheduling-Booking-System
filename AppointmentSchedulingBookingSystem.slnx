@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="AppointmentSchedulingBookingSystem/AppointmentSchedulingBookingSystem.csproj" />
+  <Project Path="tests/ArchitectureChecks/ArchitectureChecks.csproj" />
 </Solution>

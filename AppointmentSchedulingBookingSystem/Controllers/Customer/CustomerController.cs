@@ -1,7 +1,7 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace AppointmentSchedulingBookingSystem.Controllers
+namespace AppointmentSchedulingBookingSystem.Controllers.Customer
 {
     public class CustomerController : Controller
     {

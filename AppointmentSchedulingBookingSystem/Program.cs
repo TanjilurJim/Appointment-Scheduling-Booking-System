@@ -1,3 +1,4 @@
+using AppointmentSchedulingBookingSystem;
 
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -22,6 +23,8 @@ builder.Services.AddDefaultIdentity<IdentityUser>(options =>
 })
 .AddRoles<IdentityRole>()
 .AddEntityFrameworkStores<AppointmentSchedulingBookingSystemIdentityDbContext>();
+
+builder.Services.AddApplicationLayers();
 
 // Add MVC services
 builder.Services.AddControllersWithViews();
