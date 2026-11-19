@@ -1,3 +1,5 @@
+using AppointmentSchedulingBookingSystem.BLL.Customers;
+using AppointmentSchedulingBookingSystem.DAL.Customers;
 using AppointmentSchedulingBookingSystem.BLL.Admin;
 using AppointmentSchedulingBookingSystem.BLL.Consultants;
 using AppointmentSchedulingBookingSystem.BLL.Home;
@@ -14,6 +16,9 @@ public static class DependencyInjection
         services.AddScoped<IAdminService, AdminService>();
         services.AddScoped<IConsultantService, ConsultantService>();
         services.AddScoped<IHomeService, HomeService>();
+        services.AddScoped<ICustomerRepository, CustomerRepository>();
+        services.AddScoped<ICustomerService, CustomerService>();
+        services.AddSingleton(TimeProvider.System);
         return services;
     }
 }
