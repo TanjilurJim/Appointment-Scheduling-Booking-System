@@ -1,0 +1,280 @@
+﻿@model AppointmentSchedulingBookingSystem.ViewModels.ConsultantBreakListViewModel
+
+@{
+    ViewData["Title"] = "Manage Breaks";
+}
+
+<div class="container mt-4">
+
+    <h2>Manage Consultant Breaks</h2>
+
+    <p class="text-muted">
+        Add recurring or date-specific breaks within
+        your configured working hours.
+    </p>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success">
+            @TempData["Success"]
+        </div>
+    }
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger">
+            @TempData["Error"]
+        </div>
+    }
+
+    <div class="card mb-4">
+        <div class="card-body">
+
+            <h5>Add New Break</h5>
+
+            @if (!Model.WorkingDays.Any())
+            {
+                <div class="alert alert-info">
+                    Configure your working days before adding a break.
+                    <a asp-action="Schedule">Manage working schedule</a>
+                </div>
+            }
+
+            <form asp-controller="Consultant"
+                  asp-action="AddBreak"
+                  method="post">
+
+                @Html.AntiForgeryToken()
+
+                <div class="mb-3">
+                    <label class="form-label">Break Type</label>
+
+                    <select asp-for="NewBreak.BreakType"
+                            id="breakType"
+                            class="form-select">
+                        <option value="">Choose an option </option>
+                        <option value="Recurring">
+                            Recurring Weekly
+                        </option>
+                        <option value="Specific">
+                            Specific Date (one-time)
+                        </option>
+                    </select>
+                </div>
+
+                <div class="mb-3" id="dayField">
+                    <label class="form-label">Working Day</label>
+
+                    <select asp-for="NewBreak.DayOfWeek"
+                            id="workingDay"
+                            class="form-select">
+                        <option value="">Select working day</option>
+
+                        @foreach (var day in Model.WorkingDays)
+                        {
+                            <option value="@day.DayOfWeek"
+                                    data-weekday="@((int)day.DayOfWeek)"
+                                    data-start="@day.StartTime.ToString("HH:mm")"
+                                    data-end="@day.EndTime.ToString("HH:mm")">
+                                @day.DayOfWeek (@day.StartTime.ToString("HH:mm") � @day.EndTime.ToString("HH:mm"))
+                            </option>
+                        }
+                    </select>
+                </div>
+
+                <div class="mb-3" id="dateField"
+                     style="display:none">
+                    <label class="form-label">Date</label>
+
+                    <input asp-for="NewBreak.Date"
+                           type="date"
+                           class="form-control" />
+                </div>
+
+                <p id="workingHours" class="text-muted" aria-live="polite"></p>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">
+                            Start Time
+                        </label>
+
+                        <input asp-for="NewBreak.StartTime"
+                               id="breakStart"
+                               type="time"
+                               step="60"
+                               class="form-control"
+                               required />
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">
+                            End Time
+                        </label>
+
+                        <input asp-for="NewBreak.EndTime"
+                               id="breakEnd"
+                               type="time"
+                               step="60"
+                               class="form-control"
+                               required />
+                    </div>
+                </div>
+
+                <button type="submit"
+                        id="addBreakButton"
+                        class="btn btn-primary">
+                    Add Break
+                </button>
+
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+
+            <h5>Existing Breaks</h5>
+
+            @if (!Model.Breaks.Any())
+            {
+                <p class="text-muted">
+                    No breaks configured yet.
+                </p>
+            }
+            else
+            {
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Day / Date</th>
+                            <th>Start</th>
+                            <th>End</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var item in Model.Breaks)
+                        {
+                            <tr>
+                                <td>
+                                    @(item.DayOfWeek.HasValue
+                                        ? "Recurring"
+                                        : "Specific Date")
+                                </td>
+
+                                <td>
+                                    @(item.DayOfWeek?.ToString()
+                                        ?? item.Date?.ToString("yyyy-MM-dd"))
+                                </td>
+
+                                <td>
+                                    @item.StartTime.ToString("HH:mm")
+                                </td>
+
+                                <td>
+                                    @item.EndTime.ToString("HH:mm")
+                                </td>
+
+                                <td>
+                                    <form asp-controller="Consultant"
+                                          asp-action="DeleteBreak"
+                                          method="post"
+                                          onsubmit="return confirm('Delete this break?');">
+
+                                        @Html.AntiForgeryToken()
+
+                                        <input type="hidden"
+                                               name="id"
+                                               value="@item.Id" />
+
+                                        <button type="submit"
+                                                class="btn btn-danger btn-sm">
+                                            Delete
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+
+        </div>
+    </div>
+
+    <div class="mt-3">
+        <a asp-controller="Consultant"
+           asp-action="Schedule"
+           class="btn btn-secondary">
+            Back to Schedule
+        </a>
+    </div>
+
+</div>
+
+@section Scripts {
+    <script>
+        const typeSelect = document.getElementById("breakType");
+        const dayField = document.getElementById("dayField");
+        const dateField = document.getElementById("dateField");
+
+        const dayInput = document.getElementById("workingDay");
+        const dateInput = document.getElementById("NewBreak_Date");
+
+        const breakStart = document.getElementById("breakStart");
+        const breakEnd = document.getElementById("breakEnd");
+        const workingHours = document.getElementById("workingHours");
+        const addButton = document.getElementById("addBreakButton");
+        const hasWorkingDays = dayInput.options.length > 1;
+
+        function updateBreakTimeLimits(clearTimes = false) {
+            const recurring = typeSelect.value === "Recurring";
+            const specific = typeSelect.value === "Specific";
+            let option = recurring ? dayInput.selectedOptions[0] : null;
+            if (specific && dateInput.value) {
+                // Parse the calendar day locally; avoid UTC date shifts.
+                const parts = dateInput.value.split("-").map(Number);
+                const weekday = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
+                option = Array.from(dayInput.options).find(item =>
+                    item.dataset.weekday === String(weekday));
+            }
+            const start = option?.dataset.start || "";
+            const end = option?.dataset.end || "";
+            for (const input of [breakStart, breakEnd]) {
+                input.min = start;
+                input.max = end;
+                input.disabled = !hasWorkingDays || !start;
+                if (clearTimes) input.value = "";
+            }
+            workingHours.textContent = start
+                ? `Your working hours: ${start} - ${end}. ${specific ? 'This break applies only to the selected date.' : 'This break repeats every week.'}`
+                : recurring ? "Select a working day to choose break times."
+                : specific ? (dateInput.value ? "You are not scheduled to work on this date." : "Select a date for a one-time break, such as today.")
+                : "No new break will be added. Existing breaks remain unchanged.";
+            addButton.disabled = !hasWorkingDays || !start;
+        }
+
+        function updateBreakType() {
+            const recurring = typeSelect.value === "Recurring";
+
+            dayField.style.display = recurring ? "block" : "none";
+            const specific = typeSelect.value === "Specific";
+            dateField.style.display = specific ? "block" : "none";
+
+            dayInput.disabled = !recurring;
+            dateInput.disabled = !specific;
+
+            dayInput.required = recurring;
+            dateInput.required = specific;
+            updateBreakTimeLimits();
+        }
+
+        dayInput.addEventListener("change", () => updateBreakTimeLimits(true));
+        dateInput.addEventListener("change", () => updateBreakTimeLimits(true));
+        typeSelect.addEventListener("change", updateBreakType);
+        updateBreakType();
+    </script>
+}
