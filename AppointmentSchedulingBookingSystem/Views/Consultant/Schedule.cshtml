@@ -1,0 +1,126 @@
+@model AppointmentSchedulingBookingSystem.ViewModels.ConsultantScheduleViewModel
+
+@{
+    ViewData["Title"] = "Manage Working Schedule";
+}
+
+<div class="container mt-4">
+
+    <h2>Manage Working Schedule</h2>
+    <p class="text-muted">
+        Configure your weekly working days and consultation hours.
+    </p>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success">
+            @TempData["Success"]
+        </div>
+    }
+
+    <form asp-controller="Consultant"
+          asp-action="Schedule"
+          method="post">
+
+        @Html.AntiForgeryToken()
+
+        <div asp-validation-summary="All"
+             class="text-danger mb-3"></div>
+
+        <div class="card mb-4">
+            <div class="card-body">
+
+                <h5>Appointment Duration</h5>
+
+                <select asp-for="SlotDurationMinutes"
+                        class="form-select mb-4">
+                    <option value="15">15 minutes</option>
+                    <option value="30">30 minutes</option>
+                    <option value="45">45 minutes</option>
+                    <option value="60">60 minutes</option>
+                </select>
+
+                <h5>Weekly Working Hours</h5>
+
+                @for (int i = 0; i < Model.WorkingDays.Count; i++)
+                {
+                    <div class="row align-items-center mb-3 border-bottom pb-3">
+
+                        <input type="hidden"
+                               asp-for="WorkingDays[i].DayOfWeek" />
+
+                        <div class="col-md-3">
+                            <div class="form-check">
+                                <input asp-for="WorkingDays[i].IsWorking"
+                                       class="form-check-input working-toggle" />
+
+                                <label class="form-check-label">
+                                    @Model.WorkingDays[i].DayOfWeek
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Start</label>
+                            <input asp-for="WorkingDays[i].StartTime"
+                                   type="time"
+                                   step="60"
+                                   class="form-control working-time" />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">End</label>
+                            <input asp-for="WorkingDays[i].EndTime"
+                                   type="time"
+                                   step="60"
+                                   class="form-control working-time" />
+                        </div>
+                    </div>
+                }
+
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary">
+            Save Schedule
+        </button>
+
+        <a asp-action="Index"
+           class="btn btn-secondary ms-2">
+            Back to Dashboard
+        </a>
+
+    </form>
+    <div class="mt-3">
+    <a asp-controller="Consultant"
+       asp-action="Breaks"
+       class="btn btn-outline-primary">
+        Manage Breaks
+    </a>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function updateWorkingDayInputs() {
+            document.querySelectorAll('.working-toggle')
+                .forEach(function (checkbox) {
+
+                    const row = checkbox.closest('.row');
+                    const inputs = row.querySelectorAll('.working-time');
+
+                    inputs.forEach(function (input) {
+                        input.disabled = !checkbox.checked;
+                    });
+                });
+        }
+
+        document.querySelectorAll('.working-toggle')
+            .forEach(function (checkbox) {
+                checkbox.addEventListener(
+                    'change', updateWorkingDayInputs);
+            });
+
+        updateWorkingDayInputs();
+    </script>
+}
