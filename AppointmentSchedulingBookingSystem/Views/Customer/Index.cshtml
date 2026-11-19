@@ -1,29 +1,147 @@
-﻿
+@model AppointmentSchedulingBookingSystem.ViewModels.CustomerBookingViewModel
 @{
-    ViewData["Title"] = "Consultant Dashboard";
+    ViewData["Title"] = "Book an Appointment";
+    var canBook = Model.HasCustomerProfile && User.IsInRole("Customer");
 }
 
-<div class="container mt-4">
-    <h2>Welcome Consultant</h2>
-    <p class="text-muted">
-        Manage your availability and appointments.
-    </p>
+<div class="container py-4">
+    <h1 class="h2">Book an Appointment</h1>
+    <p class="text-muted">Choose a date, find a consultant and select an available slot. All times are Bangladesh time.</p>
 
-    <div class="card mt-4">
-        <div class="card-body">
-            <h5 class="card-title">My Schedule</h5>
+    @if (TempData["Success"] is string success)
+    {
+        <div class="alert alert-success" role="status">@success</div>
+    }
+    @if (TempData["Error"] is string error)
+    {
+        <div class="alert alert-danger" role="alert">@error</div>
+    }
+    @if (!Model.HasCustomerProfile)
+    {
+        <div class="alert alert-info">You can browse availability. Ask an administrator to complete your customer profile before booking.</div>
+    }
 
-            <p class="card-text">
-                View and update your available consultation slots.
-            </p>
-
-            <button class="btn btn-primary" disabled>
-                Update Schedule
-            </button>
-
-            <p class="text-muted mt-2">
-                Schedule management is not available yet.
-            </p>
+    <form asp-action="Index" method="get" class="card card-body mb-4">
+        <div class="row align-items-end g-3">
+            <div class="col-sm-6 col-md-4">
+                <label for="bookingDate" class="form-label">Appointment date</label>
+                <input id="bookingDate" name="date" type="date" class="form-control"
+                       value="@Model.Date.ToString("yyyy-MM-dd")" min="@Model.Today.ToString("yyyy-MM-dd")" required />
+            </div>
+            <div class="col-sm-auto"><button type="submit" class="btn btn-primary">Show Slots</button></div>
         </div>
-    </div>
+    </form>
+
+    @if (Model.Appointments.Any())
+    {
+        <section class="card mb-4" aria-labelledby="myAppointments">
+            <div class="card-body">
+                <h2 id="myAppointments" class="h5">My appointments on @Model.Date.ToString("dd MMM yyyy")</h2>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead><tr><th scope="col">Consultant</th><th scope="col">Time</th><th scope="col">Status</th></tr></thead>
+                        <tbody>
+                            @foreach (var appointment in Model.Appointments)
+                            {
+                                <tr>
+                                    <td>@appointment.ConsultantName</td>
+                                    <td>@appointment.StartTime.ToString("HH:mm") - @appointment.EndTime.ToString("HH:mm")</td>
+                                    <td>@appointment.Status</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    }
+
+    <h2 class="h4 mb-3">Consultants · @Model.Date.ToString("dddd, dd MMM yyyy")</h2>
+    @if (!Model.Consultants.Any())
+    {
+        <div class="alert alert-info">No active consultants are available at the moment. Please check again later.</div>
+    }
+    @foreach (var consultant in Model.Consultants)
+    {
+        var hours = consultant.WorkingDays.FirstOrDefault(d => d.DayOfWeek == Model.Date.DayOfWeek);
+        <section class="card mb-4" aria-labelledby="consultant-@consultant.Id">
+            <div class="card-body">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+                    <div>
+                        <h3 id="consultant-@consultant.Id" class="h5 mb-1">@consultant.Name</h3>
+                        <p class="text-muted mb-2">@consultant.Specialization</p>
+                    </div>
+                    <span class="badge bg-light text-dark border">@consultant.SlotDurationMinutes minute appointments</span>
+                </div>
+                <details class="mb-3">
+                    <summary class="text-primary">View weekly working schedule</summary>
+                    @if (!consultant.WorkingDays.Any())
+                    {
+                        <p class="text-muted mt-2">No working hours configured.</p>
+                    }
+                    else
+                    {
+                        <ul class="list-unstyled mt-2 mb-0">
+                            @foreach (var day in consultant.WorkingDays)
+                            {
+                                <li>@day.DayOfWeek: @day.StartTime.ToString("HH:mm") - @day.EndTime.ToString("HH:mm")</li>
+                            }
+                        </ul>
+                    }
+                </details>
+                @if (hours == null)
+                {
+                    <p class="text-muted mb-0">Not working on this date. Choose another date to see slots.</p>
+                }
+                else if (!consultant.Slots.Any())
+                {
+                    <p class="text-muted mb-0">No full appointment slots fit the configured working hours.</p>
+                }
+                else
+                {
+                    <p>Working hours: <strong>@hours.StartTime.ToString("HH:mm") - @hours.EndTime.ToString("HH:mm")</strong></p>
+                    <form asp-action="Book" method="post">
+                        <input type="hidden" name="ConsultantId" value="@consultant.Id" />
+                        <input type="hidden" name="Date" value="@Model.Date.ToString("yyyy-MM-dd")" />
+                        <fieldset>
+                            <legend class="fs-6">Select an available slot</legend>
+                            <div class="row row-cols-2 row-cols-sm-3 row-cols-lg-4 g-2 mb-3">
+                                @foreach (var slot in consultant.Slots)
+                                {
+                                    var slotId = $"slot-{consultant.Id}-{slot.StartTime:HHmmss}";
+                                    <div class="col">
+                                        @if (slot.IsAvailable && canBook)
+                                        {
+                                            <input type="radio" class="btn-check" name="StartTime" id="@slotId"
+                                                   value="@slot.StartTime.ToString("HH:mm:ss")" required />
+                                            <label class="btn btn-outline-success w-100 h-100" for="@slotId">
+                                                <span class="d-block">@slot.StartTime.ToString("HH:mm") - @slot.EndTime.ToString("HH:mm")</span>
+                                                <span class="small">Available</span>
+                                            </label>
+                                        }
+                                        else
+                                        {
+                                            <div class="border rounded p-2 h-100 text-center @(slot.IsAvailable ? "border-success text-success" : "bg-light text-muted")">
+                                                <span class="d-block">@slot.StartTime.ToString("HH:mm") - @slot.EndTime.ToString("HH:mm")</span>
+                                                <span class="small">@(slot.IsAvailable ? "Available" : $"Unavailable: {slot.UnavailableReason}")</span>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </fieldset>
+                        @if (canBook && consultant.Slots.Any(s => s.IsAvailable))
+                        {
+                            <button class="btn btn-primary" type="submit">Book Selected Slot</button>
+                            <p class="small text-muted mt-2 mb-0">Availability is checked again when you book.</p>
+                        }
+                        else if (!consultant.Slots.Any(s => s.IsAvailable))
+                        {
+                            <p class="text-muted mb-0">No available slots on this date. Please choose another date.</p>
+                        }
+                    </form>
+                }
+            </div>
+        </section>
+    }
 </div>

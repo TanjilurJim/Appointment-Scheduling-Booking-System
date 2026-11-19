@@ -96,6 +96,9 @@ roles.Add("Admin"); var saved = writes;
 Check(!(await admin.UpdateUserAsync(update, new HashSet<string>())).Succeeded && writes == saved,
     "Admin account protection");
 
+await CustomerBookingChecks.Run(Check);
+await CustomerBookingChecks.RunHttpChecks(Check);
+
 // Resolve the actual registrations and MVC actions without connecting to a database.
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
@@ -110,13 +113,15 @@ builder.Services.AddRazorPages();
 await using var app = builder.Build();
 using var scope = app.Services.CreateScope();
 Check(scope.ServiceProvider.GetRequiredService<IAdminService>() is AdminService &&
-    scope.ServiceProvider.GetRequiredService<IConsultantService>() is ConsultantService, "BLL/DAL dependency injection resolves");
+    scope.ServiceProvider.GetRequiredService<IConsultantService>() is ConsultantService &&
+    scope.ServiceProvider.GetRequiredService<AppointmentSchedulingBookingSystem.BLL.Customers.ICustomerService>() is AppointmentSchedulingBookingSystem.BLL.Customers.CustomerService, "BLL/DAL dependency injection resolves");
 var actions = scope.ServiceProvider.GetRequiredService<IActionDescriptorCollectionProvider>().ActionDescriptors.Items.OfType<ControllerActionDescriptor>().ToList();
 Check(new[] { "Home", "Admin", "Customer", "Consultant" }.All(c => actions.Any(a => a.ControllerName == c && a.ActionName == "Index")),
     "Feature folders preserve controller route names");
 var engine = scope.ServiceProvider.GetRequiredService<IRazorViewEngine>();
 Check(engine.GetView(null, "/Views/Consultant/Index.cshtml", true).Success &&
-    engine.GetView(null, "/Views/Admin/Index.cshtml", true).Success,
+    engine.GetView(null, "/Views/Admin/Index.cshtml", true).Success &&
+    engine.GetView(null, "/Views/Customer/Index.cshtml", true).Success,
     "Compiled Razor views still resolve");
 Console.WriteLine($"{checks} regression checks passed.");
 
