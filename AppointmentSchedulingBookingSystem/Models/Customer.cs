@@ -20,10 +20,12 @@ namespace AppointmentSchedulingBookingSystem.Models
 
         [Required]
         [MaxLength(20)]
-        public string Phone { get; set; }
+        public string Phone { get; set; } = string.Empty;
 
         [MaxLength(200)]
         public string? Address { get; set; }
+
+        public ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
 
 
 
