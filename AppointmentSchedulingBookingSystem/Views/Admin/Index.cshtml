@@ -1,36 +1,264 @@
-﻿
+﻿@model List<AppointmentSchedulingBookingSystem.ViewModels.AdminUserViewModel>
+
 @{
-    ViewData["Title"] = "Admin Dashboard";
+    ViewData["Title"] = "User Management";
 }
 
 <div class="container mt-4">
-    <h2>Welcome Admin</h2>
+
+    <h2>Admin - User Management</h2>
     <p class="text-muted">
-        Manage appointment requests and system activities.
+        View registered users and manage their roles.
     </p>
 
-    <h4 class="mt-4">Appointment Requests</h4>
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success">
+            @TempData["Success"]
+        </div>
+    }
 
-    <div class="table-responsive mt-3">
-        <table class="table table-bordered">
-            <thead>
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger">
+            @TempData["Error"]
+        </div>
+    }
+
+    <table class="table table-bordered table-striped">
+        <thead>
+            <tr>
+                <th>Email</th>
+                <th>Username</th>
+                <th>Roles</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var user in Model)
+            {
+                var role = user.Roles.Contains("Admin")
+                    ? "Admin"
+                    : user.Roles.Contains("Consultant")
+                        ? "Consultant"
+                        : user.Roles.Contains("Customer")
+                            ? "Customer"
+                            : "";
+
                 <tr>
-                    <th>Request ID</th>
-                    <th>Customer</th>
-                    <th>Consultant</th>
-                    <th>Appointment Date</th>
-                    <th>Time</th>
-                    <th>Status</th>
-                    <th>Action</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td colspan="7" class="text-center text-muted">
-                        Appointment requests will appear here.
+                    <td>@user.Email</td>
+                    <td>@user.UserName</td>
+                    <td>
+                        @(string.IsNullOrEmpty(role) ? "Unassigned" : role)
+                    </td>
+                    <td>
+                        @if (role != "Admin")
+                        {
+                            <button type="button"
+                                    class="btn btn-primary btn-sm edit-user"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#editUserModal"
+                                    data-id="@user.Id"
+                                    data-email="@user.Email"
+                                    data-name="@user.Name"
+                                    data-role="@role"
+                                    data-phone="@user.Phone"
+                                    data-specialization="@user.Specialization">
+                                Edit
+                            </button>
+                        }
+                        else
+                        {
+                            <span class="text-muted">Protected</span>
+                        }
                     </td>
                 </tr>
-            </tbody>
-        </table>
+            }
+        </tbody>
+    </table>
+</div>
+
+<!-- Edit User Modal -->
+<div class="modal fade" id="editUserModal" tabindex="-1"
+     aria-labelledby="editUserModalLabel" aria-hidden="true">
+
+    <div class="modal-dialog">
+        <div class="modal-content">
+
+            <form asp-controller="Admin"
+                  asp-action="UpdateUser"
+                  method="post">
+
+                @Html.AntiForgeryToken()
+
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editUserModalLabel">
+                        Edit User
+                    </h5>
+                    <button type="button" class="btn-close"
+                            data-bs-dismiss="modal"
+                            aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body">
+
+                    <input type="hidden" name="UserId" id="editUserId" />
+
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input class="form-control"
+                               id="editEmail"
+                               type="email"
+                               readonly />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Full Name</label>
+                        <input class="form-control"
+                               name="Name"
+                               id="editName"
+                               maxlength="100"
+                               required />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Role</label>
+                        <select class="form-select"
+                                name="Role"
+                                id="editRole"
+                                required>
+                            <option value="">Select role</option>
+                            <option value="Customer">Customer</option>
+                            <option value="Consultant">Consultant</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3" id="customerFields"
+                         style="display:none">
+                        <label class="form-label">Phone</label>
+                        <input class="form-control"
+                               name="Phone"
+                               id="editPhone"
+                               maxlength="20" />
+                    </div>
+
+                    <div class="mb-3" id="consultantFields"
+                         style="display:none">
+                        <label class="form-label">Specialization</label>
+                        <input class="form-control"
+                               name="Specialization"
+                               id="editSpecialization"
+                               maxlength="200" />
+                    </div>
+
+                    <div id="roleChangeNotice"
+                         class="alert alert-warning d-none">
+                        Changing an existing Customer or Consultant
+                        role is not yet supported.
+                    </div>
+
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button"
+                            class="btn btn-secondary"
+                            data-bs-dismiss="modal">
+                        Cancel
+                    </button>
+
+                    <button type="submit"
+                            class="btn btn-primary"
+                            id="saveUserButton">
+                        Save Changes
+                    </button>
+                </div>
+
+            </form>
+        </div>
     </div>
 </div>
+
+@section Scripts {
+    <script>
+        const modal = document.getElementById('editUserModal');
+        const roleSelect = document.getElementById('editRole');
+        const saveButton = document.getElementById('saveUserButton');
+
+        let originalRole = '';
+        const form = modal.querySelector('form');
+        const editableFields = ['Name', 'Role', 'Phone', 'Specialization'];
+        let originalValues = {};
+
+        // Keep identity and antiforgery fields, but omit unchanged profile values.
+        form.addEventListener('formdata', function (event) {
+            for (const name of editableFields) {
+                const field = form.elements.namedItem(name);
+                const irrelevant = (name === 'Phone' && roleSelect.value !== 'Customer') ||
+                    (name === 'Specialization' && roleSelect.value !== 'Consultant');
+                if (irrelevant || field.value === originalValues[name]) {
+                    event.formData.delete(name);
+                }
+            }
+        });
+
+        function updateRoleFields() {
+            const role = roleSelect.value;
+
+            const customerFields =
+                document.getElementById('customerFields');
+            const consultantFields =
+                document.getElementById('consultantFields');
+
+            const phone = document.getElementById('editPhone');
+            const specialization =
+                document.getElementById('editSpecialization');
+
+            customerFields.style.display =
+                role === 'Customer' ? 'block' : 'none';
+
+            consultantFields.style.display =
+                role === 'Consultant' ? 'block' : 'none';
+
+            phone.disabled = role !== 'Customer';
+            specialization.disabled = role !== 'Consultant';
+            phone.required = role === 'Customer';
+            specialization.required = role === 'Consultant';
+
+            const changingExistingRole =
+                originalRole !== '' && originalRole !== role;
+
+            document.getElementById('roleChangeNotice')
+                .classList.toggle('d-none', !changingExistingRole);
+
+            saveButton.disabled = changingExistingRole;
+        }
+
+        modal.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+
+            document.getElementById('editUserId').value =
+                button.dataset.id;
+
+            document.getElementById('editEmail').value =
+                button.dataset.email;
+
+            document.getElementById('editName').value =
+                button.dataset.name;
+
+            document.getElementById('editPhone').value =
+                button.dataset.phone;
+
+            document.getElementById('editSpecialization').value =
+                button.dataset.specialization;
+
+            originalRole = button.dataset.role;
+            roleSelect.value = originalRole;
+
+            originalValues = Object.fromEntries(editableFields.map(name =>
+                [name, form.elements.namedItem(name).value]));
+            updateRoleFields();
+        });
+
+        roleSelect.addEventListener('change', updateRoleFields);
+    </script>
+}
